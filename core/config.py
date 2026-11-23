@@ -7,6 +7,21 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
+
+def _bridge_streamlit_secrets() -> None:
+    """Mirror top-level Streamlit Community Cloud secrets into os.environ if not already set."""
+    try:
+        import streamlit as st
+
+        for k, v in st.secrets.items():
+            if isinstance(v, (str, int, float, bool)) and k not in os.environ:
+                os.environ[str(k)] = str(v)
+    except Exception:
+        pass
+
+
+_bridge_streamlit_secrets()
+
 APP_DATA_DIR = Path(os.getenv("MARKETSAGE_DATA_DIR", Path.home() / ".marketsage_unified"))
 DB_PATH = APP_DATA_DIR / "marketsage.db"
 EXPORT_DIR = PROJECT_ROOT / "output"

@@ -1,5 +1,8 @@
 # 📈 MarketSage Unified
 
+**Live App:** [https://marketsage.streamlit.app/](https://marketsage.streamlit.app/)  
+**Repository:** [https://github.com/donne4real/MarketSage-Unified](https://github.com/donne4real/MarketSage-Unified)
+
 **One coherent financial intelligence platform** consolidating all US/global stock, ETF, mutual fund, 100-bagger, technical analysis, dividend/DCF valuation, portfolio risk, SEC EDGAR, and AI research workflows into a single zero-duplication codebase.
 
 *(Nigerian Exchange equities remain dedicated to your standalone [NGX Tracker](https://ngx-tracker.pages.dev).)*

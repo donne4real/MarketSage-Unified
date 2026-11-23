@@ -75,10 +75,13 @@ def render_sidebar() -> DataEngine:
             "Alpha Vantage → Twelve Data → yfinance": "av_first",
             "Twelve Data → Alpha Vantage → yfinance": "td_first",
         }
+        import os
+        env_order = os.getenv("DATA_SOURCE_ORDER", "yf_first").strip().lower()
+        default_idx = list(order_map.values()).index(env_order) if env_order in order_map.values() else 0
         chosen = st.selectbox(
             "Data Source Priority",
             list(order_map.keys()),
-            index=0,
+            index=default_idx,
             key="source_order_label",
         )
         st.session_state["source_order"] = order_map[chosen]
