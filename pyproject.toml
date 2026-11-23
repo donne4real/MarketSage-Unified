@@ -1,0 +1,10 @@
+[project]
+name = "marketsage-unified"
+version = "1.0.0"
+description = "Unified Multi-Asset Financial Research, Screening, Valuation, Risk & AI Platform"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
