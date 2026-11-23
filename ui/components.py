@@ -8,9 +8,10 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 from core.ai_research import detect_provider
-from core.data_engine import DataEngine
+from core.data_engine import UNIVERSES as CURATED_UNIVERSES, DataEngine
 from core.database import Database
 from core.exporter import export_csv_bytes, export_excel_bytes
+from core.universes import UniverseProvider, parse_uploaded_tickers
 
 
 CUSTOM_CSS = """
@@ -116,6 +117,183 @@ def parse_tickers(text: str) -> list[str]:
         if sym and sym not in seen:
             seen.append(sym)
     return seen
+
+
+def render_single_ticker_input(
+    key_prefix: str,
+    label: str = "Ticker",
+    placeholder: str = "e.g. AAPL",
+    asset_type: str | None = None,
+) -> str:
+    """Clean empty ticker input with optional quick-pick from Watchlist/Portfolio."""
+    db = get_db()
+    saved_syms: list[str] = []
+    for item in db.list_watchlist(asset_type=asset_type):
+        if item["ticker"] not in saved_syms:
+            saved_syms.append(item["ticker"])
+    for h in db.list_holdings():
+        if h["ticker"] not in saved_syms:
+            saved_syms.append(h["ticker"])
+
+    txt_key = f"{key_prefix}_single_ticker"
+    st.session_state.setdefault(txt_key, "")
+
+    if saved_syms:
+        c_in, c_pick = st.columns([3, 2])
+        with c_pick:
+            picked = st.selectbox(
+                "Quick-Pick Saved",
+                ["— Type manually —"] + saved_syms,
+                key=f"{key_prefix}_quick_pick",
+            )
+            if picked != "— Type manually —" and st.session_state.get(f"{key_prefix}_last_pick") != picked:
+                st.session_state[txt_key] = picked
+                st.session_state[f"{key_prefix}_last_pick"] = picked
+        with c_in:
+            val = st.text_input(label, placeholder=placeholder, key=txt_key)
+    else:
+        val = st.text_input(label, placeholder=placeholder, key=txt_key)
+    return val.strip().upper()
+
+
+def render_ticker_selector(
+    key_prefix: str,
+    asset_class: str = "stock",
+    placeholder: str = "Type tickers (e.g. AAPL, MSFT, GOOGL) or load a market universe above...",
+) -> list[str]:
+    """Blank-by-default ticker selector with Live Market Discovery, Watchlist, Curated & CSV loaders."""
+    db = get_db()
+    provider = UniverseProvider(db=db)
+    txt_key = f"{key_prefix}_tickers_text"
+    st.session_state.setdefault(txt_key, "")
+
+    # Build source options appropriate for this asset class
+    sources = ["Manual Entry (Blank)", "My Watchlist", "My Portfolio Holdings"]
+    if asset_class in {"stock", "bagger"}:
+        sources += [
+            "S&P 500 (Live)",
+            "NASDAQ-100 (Live)",
+            "Full NASDAQ Exchange (Live)",
+            "Full NYSE Exchange (Live)",
+        ]
+    elif asset_class == "etf":
+        sources += ["All US ETFs — NASDAQ & NYSE Arca (Live)"]
+
+    curated_map = {
+        "stock": ["US Blue-Chip & Tech Leaders", "Dividend Aristocrats", "Under-$50 Value & Growth"],
+        "etf": ["Core & Sector ETFs"],
+        "mutual_fund": ["Popular Mutual Funds"],
+        "bagger": ["100-Bagger Candidates (Small/Mid Growth)"],
+    }
+    sources += ["Curated Starter Preset", "Upload CSV / TXT"]
+
+    with st.expander("🌐 Load Market Universe, Watchlist, or CSV (Optional)", expanded=False):
+        s_col, opt_col = st.columns([2, 2])
+        source = s_col.selectbox("Ticker Source", sources, key=f"{key_prefix}_src")
+
+        entries_key = f"{key_prefix}_loaded_entries"
+        loaded_src_key = f"{key_prefix}_loaded_src_name"
+
+        if source == "Upload CSV / TXT":
+            uploaded = opt_col.file_uploader(
+                "Upload CSV (Ticker/Symbol column) or TXT list",
+                type=["csv", "txt"],
+                key=f"{key_prefix}_csv",
+            )
+            if uploaded is not None:
+                syms = parse_uploaded_tickers(uploaded.getvalue(), uploaded.name)
+                if syms:
+                    st.caption(f"Parsed **{len(syms)}** unique tickers from `{uploaded.name}`.")
+                    if st.button("Apply Uploaded Tickers", key=f"{key_prefix}_apply_csv"):
+                        st.session_state[txt_key] = ", ".join(syms)
+                        st.rerun()
+                else:
+                    st.warning("No valid ticker symbols detected in file.")
+
+        elif source != "Manual Entry (Blank)":
+            preset_choice = None
+            if source == "Curated Starter Preset":
+                preset_choice = opt_col.selectbox(
+                    "Starter List",
+                    curated_map.get(asset_class, list(CURATED_UNIVERSES.keys())),
+                    key=f"{key_prefix}_curated",
+                )
+
+            c_lim, c_rand, c_btn = st.columns([2, 1, 1])
+            limit = c_lim.slider("Max Tickers to Load", 5, 100, 20, 5, key=f"{key_prefix}_limit")
+            randomize = c_rand.checkbox("Random Sample", value=False, key=f"{key_prefix}_rand")
+
+            # Check if we already fetched sector metadata for S&P 500 / NASDAQ-100
+            cached_entries = (
+                st.session_state.get(entries_key, [])
+                if st.session_state.get(loaded_src_key) == source
+                else []
+            )
+            sector_choice = "All Sectors"
+            if source in {"S&P 500 (Live)", "NASDAQ-100 (Live)"} and cached_entries:
+                sectors = sorted({e.get("sector", "Unknown") for e in cached_entries if e.get("sector")})
+                if len(sectors) > 1:
+                    sector_choice = opt_col.selectbox(
+                        "Filter by Sector",
+                        ["All Sectors"] + sectors,
+                        key=f"{key_prefix}_sector",
+                    )
+
+            with c_btn:
+                st.markdown("<br>", unsafe_allow_html=True)
+                load_clicked = st.button("Load Tickers", key=f"{key_prefix}_load_btn", use_container_width=True)
+
+            if load_clicked:
+                try:
+                    with st.spinner(f"Loading {source}..."):
+                        if source == "My Watchlist":
+                            entries = provider.get_watchlist_entries(
+                                asset_type=asset_class if asset_class != "bagger" else None
+                            )
+                        elif source == "My Portfolio Holdings":
+                            entries = provider.get_portfolio_entries()
+                        elif source == "S&P 500 (Live)":
+                            entries = provider.get_sp500()
+                        elif source == "NASDAQ-100 (Live)":
+                            entries = provider.get_nasdaq100()
+                        elif source == "Full NASDAQ Exchange (Live)":
+                            entries = provider.get_exchange_directory("NASDAQ", etfs_only=False)
+                        elif source == "Full NYSE Exchange (Live)":
+                            entries = provider.get_exchange_directory("NYSE", etfs_only=False)
+                        elif source == "All US ETFs — NASDAQ & NYSE Arca (Live)":
+                            entries = provider.get_exchange_directory("ALL", etfs_only=True)
+                        elif source == "Curated Starter Preset" and preset_choice:
+                            entries = provider.get_curated(preset_choice)
+                        else:
+                            entries = []
+
+                    st.session_state[entries_key] = entries
+                    st.session_state[loaded_src_key] = source
+                    if not entries:
+                        st.warning(f"No tickers found in '{source}'.")
+                    else:
+                        picked = provider.select_tickers(entries, sector=sector_choice, limit=limit, randomize=randomize)
+                        st.session_state[txt_key] = ", ".join(picked)
+                        st.success(f"Loaded {len(picked)} of {len(entries)} tickers from {source}.")
+                        st.rerun()
+                except Exception as exc:
+                    st.error(f"Could not fetch live universe ({source}): {exc}")
+
+    t_col, clr_col = st.columns([6, 1])
+    with t_col:
+        raw_text = st.text_area(
+            "Tickers to Analyze (comma or newline separated)",
+            placeholder=placeholder,
+            height=80,
+            key=txt_key,
+        )
+    with clr_col:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        if st.button("Clear", key=f"{key_prefix}_clear", use_container_width=True):
+            st.session_state[txt_key] = ""
+            st.rerun()
+
+    return parse_tickers(raw_text)
 
 
 def render_download_buttons(df: pd.DataFrame, sheets: dict[str, pd.DataFrame], prefix: str) -> None:

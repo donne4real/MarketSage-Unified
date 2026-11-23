@@ -5,16 +5,15 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from core.data_engine import UNIVERSES
 from core.strategies import evaluate_batch
 from core.strategies.bagger import BAGGER_STRATEGIES
 from ui.components import (
     get_db,
-    parse_tickers,
     plot_strategy_scores,
     render_download_buttons,
     render_hero,
     render_sidebar,
+    render_ticker_selector,
 )
 
 st.set_page_config(page_title="100-Bagger Hunter | MarketSage", page_icon="🚀", layout="wide")
@@ -26,32 +25,31 @@ render_hero(
     "Hunt for long-runway compounders combining small/mid-cap size, hyper-growth, twin-engine PEG valuation, high ROIC, wide gross margins, and founder alignment.",
 )
 
-c1, c2 = st.columns([2, 2])
-with c1:
-    ticker_input = st.text_area(
-        "Candidate Tickers",
-        value=", ".join(UNIVERSES["100-Bagger Candidates (Small/Mid Growth)"]),
-        height=80,
-    )
-with c2:
-    selected_strats = st.multiselect(
-        "100-Bagger Criteria",
-        list(BAGGER_STRATEGIES.keys()),
-        default=list(BAGGER_STRATEGIES.keys()),
-    )
+tickers = render_ticker_selector(
+    "bagger_screen",
+    asset_class="bagger",
+    placeholder="Type growth candidates (e.g. DUOL, AXON, MELI, ELF) or load a random sample from NASDAQ / NYSE / S&P 500 above...",
+)
+selected_strats = st.multiselect(
+    "100-Bagger Criteria",
+    list(BAGGER_STRATEGIES.keys()),
+    default=list(BAGGER_STRATEGIES.keys()),
+)
 
 if st.button("Scan 100-Bagger Candidates", type="primary"):
-    tickers = parse_tickers(ticker_input)
-    prog = st.progress(0.0, text="Scanning growth compounders...")
-    infos = engine.get_batch_info(tickers, progress_callback=lambda i, t, s: prog.progress(i / max(t, 1), text=f"Scanning {s} ({i}/{t})"))
-    prog.empty()
-    if infos:
-        df, evals = evaluate_batch(infos, asset_class="bagger", selected_strategies=selected_strats)
-        st.session_state["bagger_df"] = df
-        st.session_state["bagger_evals"] = evals
-        db.log_screener_run("100_bagger_hunter", {"tickers": len(tickers)}, len(df))
+    if not tickers:
+        st.warning("Enter at least one ticker or load a market universe above first.")
     else:
-        st.error("Unable to fetch candidate data.")
+        prog = st.progress(0.0, text="Scanning growth compounders...")
+        infos = engine.get_batch_info(tickers, progress_callback=lambda i, t, s: prog.progress(i / max(t, 1), text=f"Scanning {s} ({i}/{t})"))
+        prog.empty()
+        if infos:
+            df, evals = evaluate_batch(infos, asset_class="bagger", selected_strategies=selected_strats)
+            st.session_state["bagger_df"] = df
+            st.session_state["bagger_evals"] = evals
+            db.log_screener_run("100_bagger_hunter", {"tickers": len(tickers)}, len(df))
+        else:
+            st.error("Unable to fetch candidate data.")
 
 if "bagger_df" in st.session_state:
     df = st.session_state["bagger_df"]

@@ -11,7 +11,7 @@ from core.dividends import (
     gordon_growth_valuation,
     project_drip,
 )
-from ui.components import render_download_buttons, render_hero, render_sidebar
+from ui.components import render_download_buttons, render_hero, render_sidebar, render_single_ticker_input
 
 st.set_page_config(page_title="Dividends & Valuation | MarketSage", page_icon="💰", layout="wide")
 engine = render_sidebar()
@@ -24,11 +24,16 @@ render_hero(
 tab_val, tab_drip = st.tabs(["Intrinsic Valuation & Dividend Safety", "DRIP Income Compounder"])
 
 with tab_val:
-    c1, c2 = st.columns([3, 1])
-    ticker = c1.text_input("Stock Ticker", value="JNJ").strip().upper()
-    load_btn = c2.button("Fetch Fundamentals", type="primary", use_container_width=True)
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        ticker = render_single_ticker_input("val_single", label="Stock Ticker", placeholder="e.g. JNJ, PG, KO, MSFT")
+    with c2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        load_btn = st.button("Fetch Fundamentals", type="primary", use_container_width=True)
 
-    if load_btn and ticker:
+    if load_btn and not ticker:
+        st.warning("Enter a stock ticker first.")
+    elif load_btn and ticker:
         with st.spinner(f"Loading {ticker} valuation inputs..."):
             try:
                 st.session_state["val_info"] = engine.get_ticker_info(ticker)

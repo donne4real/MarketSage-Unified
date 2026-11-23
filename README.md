@@ -16,6 +16,7 @@ MarketSage-Unified/
 │   ├── database.py                     # Single SQLite DB (24h cache, quotas, watchlist, holdings, decisions, AI cache)
 │   ├── sources/                        # Alpha Vantage, Twelve Data, SEC EDGAR clients
 │   ├── data_engine.py                  # Multi-source fallback chain + normalization + analyst ratings
+│   ├── universes.py                    # Live 7-day cached S&P 500, NASDAQ-100, NASDAQ/NYSE, US ETFs & CSV loaders
 │   ├── strategies/                     # 45 Models: Stocks (15), ETFs (10), Mutual Funds (10), 100-Bagger (10)
 │   ├── technicals.py                   # SMA/EMA, RSI-14, MACD, Bollinger Bands, Support/Resistance
 │   ├── dividends.py                    # Gordon Growth, 5-Yr FCF DCF, Safety Score & DRIP Compounder

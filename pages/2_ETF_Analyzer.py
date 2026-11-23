@@ -6,17 +6,16 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from core.data_engine import UNIVERSES
 from core.screener import build_comparison_table
 from core.strategies import evaluate_batch
 from core.strategies.etfs import ETF_STRATEGIES
 from ui.components import (
     get_db,
-    parse_tickers,
     plot_strategy_scores,
     render_download_buttons,
     render_hero,
     render_sidebar,
+    render_ticker_selector,
 )
 
 st.set_page_config(page_title="ETF Analyzer | MarketSage", page_icon="📈", layout="wide")
@@ -28,32 +27,31 @@ render_hero(
     "Evaluate Exchange-Traded Funds on cost efficiency, scale, income, momentum, diversification, and inspect underlying top holdings & sector allocations.",
 )
 
-c1, c2 = st.columns([2, 2])
-with c1:
-    ticker_input = st.text_area(
-        "ETF Tickers",
-        value=", ".join(UNIVERSES["Core & Sector ETFs"][:10]),
-        height=80,
-    )
-with c2:
-    selected_strats = st.multiselect(
-        "ETF Strategies",
-        list(ETF_STRATEGIES.keys()),
-        default=list(ETF_STRATEGIES.keys()),
-    )
+tickers = render_ticker_selector(
+    "etf_screen",
+    asset_class="etf",
+    placeholder="Type ETF tickers (e.g. VOO, QQQ, SCHD, VXUS) or open 'Load Market Universe' above to browse all US ETFs, Watchlist, or CSV...",
+)
+selected_strats = st.multiselect(
+    "ETF Strategies",
+    list(ETF_STRATEGIES.keys()),
+    default=list(ETF_STRATEGIES.keys()),
+)
 
 if st.button("Analyze ETFs", type="primary"):
-    tickers = parse_tickers(ticker_input)
-    prog = st.progress(0.0, text="Fetching ETF profiles...")
-    infos = engine.get_batch_info(tickers, progress_callback=lambda i, t, s: prog.progress(i / max(t, 1), text=f"Fetching {s} ({i}/{t})"))
-    prog.empty()
-    if infos:
-        df, evals = evaluate_batch(infos, asset_class="etf", selected_strategies=selected_strats)
-        st.session_state["etf_df"] = df
-        st.session_state["etf_infos"] = infos
-        db.log_screener_run("etf_analyzer", {"tickers": len(tickers)}, len(df))
+    if not tickers:
+        st.warning("Enter at least one ETF ticker or load a universe above first.")
     else:
-        st.error("Could not fetch ETF data.")
+        prog = st.progress(0.0, text="Fetching ETF profiles...")
+        infos = engine.get_batch_info(tickers, progress_callback=lambda i, t, s: prog.progress(i / max(t, 1), text=f"Fetching {s} ({i}/{t})"))
+        prog.empty()
+        if infos:
+            df, evals = evaluate_batch(infos, asset_class="etf", selected_strategies=selected_strats)
+            st.session_state["etf_df"] = df
+            st.session_state["etf_infos"] = infos
+            db.log_screener_run("etf_analyzer", {"tickers": len(tickers)}, len(df))
+        else:
+            st.error("Could not fetch ETF data.")
 
 if "etf_df" in st.session_state:
     df = st.session_state["etf_df"]

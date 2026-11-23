@@ -12,6 +12,7 @@ from ui.components import (
     plot_equity_curve,
     render_hero,
     render_sidebar,
+    render_single_ticker_input,
 )
 
 st.set_page_config(page_title="Technicals & Backtest | MarketSage", page_icon="📉", layout="wide")
@@ -25,12 +26,17 @@ render_hero(
 tab_tech, tab_bt = st.tabs(["Technical Indicators", "Strategy & Portfolio Backtester"])
 
 with tab_tech:
-    c1, c2, c3 = st.columns([2, 1, 1])
-    ticker = c1.text_input("Ticker", value="NVDA").strip().upper()
+    c1, c2, c3 = st.columns([3, 1, 1])
+    with c1:
+        ticker = render_single_ticker_input("tech_single", label="Ticker", placeholder="e.g. NVDA, AAPL, VOO")
     period = c2.selectbox("History Window", ["6mo", "1y", "2y", "5y"], index=1)
-    run_tech = c3.button("Load Technicals", type="primary", use_container_width=True)
+    with c3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        run_tech = st.button("Load Technicals", type="primary", use_container_width=True)
 
-    if run_tech and ticker:
+    if run_tech and not ticker:
+        st.warning("Enter a ticker symbol first.")
+    elif run_tech and ticker:
         with st.spinner(f"Fetching {ticker} ({period})..."):
             try:
                 hist = engine.get_price_history(ticker, period=period)
@@ -54,7 +60,8 @@ with tab_bt:
     b1, b2, b3 = st.columns([2, 1, 1])
     bt_tickers = b1.text_input(
         "Ticker(s)",
-        value="AAPL" if mode.startswith("Single") else "VOO, QQQ, SCHD, NVDA",
+        value="",
+        placeholder="e.g. AAPL" if mode.startswith("Single") else "e.g. VOO, QQQ, SCHD, NVDA",
     )
     bt_period = b2.selectbox("Backtest Period", ["1y", "2y", "3y", "5y"], index=2)
     bt_cap = b3.number_input("Initial Capital ($)", min_value=500.0, value=10000.0, step=1000.0)
@@ -70,6 +77,9 @@ with tab_bt:
 
     if st.button("Run Backtest", type="primary"):
         syms = parse_tickers(bt_tickers)
+        if not syms:
+            st.warning("Enter one or more tickers before running a backtest.")
+            st.stop()
         with st.spinner("Running backtest & loading SPY benchmark..."):
             try:
                 spy_hist = engine.get_price_history("SPY", period=bt_period)

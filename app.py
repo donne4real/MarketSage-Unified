@@ -6,7 +6,7 @@ import streamlit as st
 
 from core.ai_research import detect_red_flags
 from core.strategies import STRATEGY_REGISTRIES, evaluate_security
-from ui.components import get_db, render_hero, render_sidebar
+from ui.components import get_db, render_hero, render_sidebar, render_single_ticker_input
 
 st.set_page_config(
     page_title="MarketSage Unified",
@@ -41,14 +41,20 @@ st.divider()
 st.subheader("⚡ Quick Security Snapshot")
 q_col1, q_col2, q_col3 = st.columns([3, 2, 1])
 with q_col1:
-    quick_ticker = st.text_input("Enter Ticker (Stock, ETF, or Mutual Fund)", value="AAPL").strip().upper()
+    quick_ticker = render_single_ticker_input(
+        "home_quick",
+        label="Enter Ticker (Stock, ETF, or Mutual Fund)",
+        placeholder="e.g. AAPL, VOO, VFIAX",
+    )
 with q_col2:
     quick_mode = st.selectbox("Evaluation Lens", ["stock", "etf", "mutual_fund", "bagger"])
 with q_col3:
     st.markdown("<br>", unsafe_allow_html=True)
     run_quick = st.button("Analyze", type="primary", use_container_width=True)
 
-if run_quick and quick_ticker:
+if run_quick and not quick_ticker:
+    st.warning("Enter a ticker symbol first (e.g. AAPL or VOO).")
+elif run_quick and quick_ticker:
     with st.spinner(f"Fetching {quick_ticker} via multi-source engine..."):
         try:
             info = engine.get_ticker_info(quick_ticker)

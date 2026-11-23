@@ -26,7 +26,7 @@ render_hero(
 with st.expander("➕ Add Holding to Portfolio", expanded=not bool(db.list_holdings())):
     with st.form("add_holding_form", clear_on_submit=True):
         h1, h2, h3, h4, h5, h6 = st.columns(6)
-        tk = h1.text_input("Ticker", value="VOO").strip().upper()
+        tk = h1.text_input("Ticker", value="", placeholder="e.g. VOO").strip().upper()
         shares = h2.number_input("Shares", min_value=0.0001, value=10.0, step=1.0)
         cost = h3.number_input("Avg Cost ($)", min_value=0.01, value=450.0, step=5.0)
         atype = h4.selectbox("Asset", ["etf", "stock", "mutual_fund"])

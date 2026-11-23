@@ -5,7 +5,6 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from core.data_engine import UNIVERSES
 from core.screener import PRESET_FILTERS, FilterRule, apply_custom_filters, build_comparison_table
 from core.strategies import evaluate_batch
 from core.strategies.stocks import STOCK_STRATEGIES
@@ -16,6 +15,7 @@ from ui.components import (
     render_download_buttons,
     render_hero,
     render_sidebar,
+    render_ticker_selector,
 )
 
 st.set_page_config(page_title="Stock Screener | MarketSage", page_icon="📊", layout="wide")
@@ -30,39 +30,37 @@ render_hero(
 tab_screen, tab_custom, tab_compare = st.tabs(["Multi-Model Screener", "Custom Metric Filter", "Side-by-Side Comparison"])
 
 with tab_screen:
-    c1, c2 = st.columns([2, 2])
-    with c1:
-        preset_u = st.selectbox(
-            "Starter Universe",
-            ["US Blue-Chip & Tech Leaders", "Dividend Aristocrats", "Under-$50 Value & Growth", "Custom"],
-        )
-        default_tickers = ", ".join(UNIVERSES.get(preset_u, ["AAPL", "MSFT", "GOOGL", "JNJ", "KO"]))
-        ticker_input = st.text_area("Tickers (comma-separated)", value=default_tickers, height=80)
-    with c2:
-        selected_strats = st.multiselect(
-            "Strategies to Apply",
-            list(STOCK_STRATEGIES.keys()),
-            default=list(STOCK_STRATEGIES.keys())[:10],
-        )
+    tickers = render_ticker_selector(
+        "stock_screen",
+        asset_class="stock",
+        placeholder="Type stock tickers (e.g. AAPL, MSFT, JNJ) or open 'Load Market Universe' above for S&P 500, NASDAQ-100, NYSE/NASDAQ, Watchlist, or CSV...",
+    )
+    selected_strats = st.multiselect(
+        "Strategies to Apply",
+        list(STOCK_STRATEGIES.keys()),
+        default=list(STOCK_STRATEGIES.keys())[:10],
+    )
 
     if st.button("Run Stock Screen", type="primary"):
-        tickers = parse_tickers(ticker_input)
-        prog = st.progress(0.0, text="Fetching stock fundamentals...")
-
-        def _cb(i: int, tot: int, sym: str):
-            prog.progress(i / max(tot, 1), text=f"Fetching {sym} ({i}/{tot})...")
-
-        infos = engine.get_batch_info(tickers, progress_callback=_cb)
-        prog.empty()
-
-        if not infos:
-            st.error("No stock data returned. Check tickers or API limits.")
+        if not tickers:
+            st.warning("Enter at least one ticker or load a market universe above first.")
         else:
-            df, evals = evaluate_batch(infos, asset_class="stock", selected_strategies=selected_strats)
-            st.session_state["stock_screen_df"] = df
-            st.session_state["stock_screen_evals"] = evals
-            st.session_state["stock_screen_infos"] = infos
-            db.log_screener_run("stock_multi_model", {"tickers": len(tickers), "strategies": len(selected_strats)}, len(df))
+            prog = st.progress(0.0, text="Fetching stock fundamentals...")
+
+            def _cb(i: int, tot: int, sym: str):
+                prog.progress(i / max(tot, 1), text=f"Fetching {sym} ({i}/{tot})...")
+
+            infos = engine.get_batch_info(tickers, progress_callback=_cb)
+            prog.empty()
+
+            if not infos:
+                st.error("No stock data returned. Check tickers or API limits.")
+            else:
+                df, evals = evaluate_batch(infos, asset_class="stock", selected_strategies=selected_strats)
+                st.session_state["stock_screen_df"] = df
+                st.session_state["stock_screen_evals"] = evals
+                st.session_state["stock_screen_infos"] = infos
+                db.log_screener_run("stock_multi_model", {"tickers": len(tickers), "strategies": len(selected_strats)}, len(df))
 
     if "stock_screen_df" in st.session_state:
         df = st.session_state["stock_screen_df"]
@@ -129,11 +127,14 @@ with tab_custom:
             st.dataframe(mdf, use_container_width=True, hide_index=True)
 
 with tab_compare:
-    comp_tickers = st.text_input("Tickers to Compare Side-by-Side", value="AAPL, MSFT, GOOGL, NVDA")
+    comp_tickers = st.text_input("Tickers to Compare Side-by-Side", value="", placeholder="e.g. AAPL, MSFT, GOOGL, NVDA")
     if st.button("Compare Tickers"):
         syms = parse_tickers(comp_tickers)
-        comp_infos = engine.get_batch_info(syms)
-        if comp_infos:
-            st.dataframe(build_comparison_table(comp_infos), use_container_width=True, hide_index=True)
+        if not syms:
+            st.warning("Enter 2 or more tickers to compare.")
         else:
-            st.warning("Unable to load comparison metrics.")
+            comp_infos = engine.get_batch_info(syms)
+            if comp_infos:
+                st.dataframe(build_comparison_table(comp_infos), use_container_width=True, hide_index=True)
+            else:
+                st.warning("Unable to load comparison metrics.")

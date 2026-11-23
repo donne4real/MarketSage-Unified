@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from core.ai_research import detect_provider, detect_red_flags, generate_research_brief
-from ui.components import get_db, render_hero, render_sidebar
+from ui.components import get_db, render_hero, render_sidebar, render_single_ticker_input
 
 st.set_page_config(page_title="AI Research & SEC | MarketSage", page_icon="🤖", layout="wide")
 engine = render_sidebar()
@@ -17,14 +17,18 @@ render_hero(
     "Combine live SEC 10-K/10-Q retrieval, automated red-flag checks, Wall Street analyst price targets, and multi-provider LLM synthesis (Claude / Gemini / OpenAI).",
 )
 
-c1, c2, c3 = st.columns([2, 1, 1])
-ticker = c1.text_input("Security Ticker", value="MSFT").strip().upper()
+c1, c2, c3 = st.columns([3, 1, 1])
+with c1:
+    ticker = render_single_ticker_input("ai_single", label="Security Ticker", placeholder="e.g. MSFT, AAPL, VOO")
 fetch_10k = c2.checkbox("Include Latest SEC 10-K Text", value=True)
 force_ai = c3.checkbox("Bypass AI Cache", value=False)
 
 st.caption(f"Detected AI provider: **`{detect_provider()}`** (works offline with deterministic quant brief if no API key is set in `.env`).")
 
-if st.button("Run Deep Research", type="primary") and ticker:
+if st.button("Run Deep Research", type="primary"):
+    if not ticker:
+        st.warning("Enter a ticker symbol first.")
+        st.stop()
     with st.spinner(f"Gathering fundamentals, analyst ratings, SEC filings & research brief for {ticker}..."):
         try:
             info = engine.get_ticker_info(ticker)

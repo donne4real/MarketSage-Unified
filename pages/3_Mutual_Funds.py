@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core.data_engine import UNIVERSES
 from core.screener import build_comparison_table
 from core.strategies import evaluate_batch
 from core.strategies.mutual_funds import MUTUAL_FUND_STRATEGIES
 from ui.components import (
     get_db,
-    parse_tickers,
     plot_strategy_scores,
     render_download_buttons,
     render_hero,
     render_sidebar,
+    render_ticker_selector,
 )
 
 st.set_page_config(page_title="Mutual Funds | MarketSage", page_icon="🏦", layout="wide")
@@ -26,32 +25,31 @@ render_hero(
     "Screen mutual funds for low fee drag, 3Y/5Y compounding consistency, tax efficiency, income generation, and fund family strength.",
 )
 
-c1, c2 = st.columns([2, 2])
-with c1:
-    ticker_input = st.text_area(
-        "Mutual Fund Tickers",
-        value=", ".join(dict.fromkeys(UNIVERSES["Popular Mutual Funds"])),
-        height=80,
-    )
-with c2:
-    selected_strats = st.multiselect(
-        "Mutual Fund Models",
-        list(MUTUAL_FUND_STRATEGIES.keys()),
-        default=list(MUTUAL_FUND_STRATEGIES.keys()),
-    )
+tickers = render_ticker_selector(
+    "mf_screen",
+    asset_class="mutual_fund",
+    placeholder="Type Mutual Fund tickers (e.g. VFIAX, FXAIX, VTSAX, SWPPX) or open 'Load Market Universe' above...",
+)
+selected_strats = st.multiselect(
+    "Mutual Fund Models",
+    list(MUTUAL_FUND_STRATEGIES.keys()),
+    default=list(MUTUAL_FUND_STRATEGIES.keys()),
+)
 
 if st.button("Analyze Mutual Funds", type="primary"):
-    tickers = parse_tickers(ticker_input)
-    prog = st.progress(0.0, text="Fetching mutual fund profiles...")
-    infos = engine.get_batch_info(tickers, progress_callback=lambda i, t, s: prog.progress(i / max(t, 1), text=f"Fetching {s} ({i}/{t})"))
-    prog.empty()
-    if infos:
-        df, _ = evaluate_batch(infos, asset_class="mutual_fund", selected_strategies=selected_strats)
-        st.session_state["mf_df"] = df
-        st.session_state["mf_infos"] = infos
-        db.log_screener_run("mutual_fund_analyzer", {"tickers": len(tickers)}, len(df))
+    if not tickers:
+        st.warning("Enter at least one Mutual Fund ticker or load a list above first.")
     else:
-        st.error("Unable to fetch mutual fund metrics.")
+        prog = st.progress(0.0, text="Fetching mutual fund profiles...")
+        infos = engine.get_batch_info(tickers, progress_callback=lambda i, t, s: prog.progress(i / max(t, 1), text=f"Fetching {s} ({i}/{t})"))
+        prog.empty()
+        if infos:
+            df, _ = evaluate_batch(infos, asset_class="mutual_fund", selected_strategies=selected_strats)
+            st.session_state["mf_df"] = df
+            st.session_state["mf_infos"] = infos
+            db.log_screener_run("mutual_fund_analyzer", {"tickers": len(tickers)}, len(df))
+        else:
+            st.error("Unable to fetch mutual fund metrics.")
 
 if "mf_df" in st.session_state:
     df = st.session_state["mf_df"]
