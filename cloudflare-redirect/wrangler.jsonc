@@ -1,0 +1,12 @@
+{
+  "name": "marketsage-redirect",
+  "main": "index.js",
+  "compatibility_date": "2026-08-22",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "marketsage.leyesapps.com",
+      "custom_domain": true
+    }
+  ]
+}
